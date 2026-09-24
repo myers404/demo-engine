@@ -10,7 +10,7 @@ from demo_engine.mcp_server import MCPDemoServer
 
 class MCPDemoServerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        config = Path(__file__).parents[1] / "demo_engine" / "commerce_demo.yaml"
+        config = Path(__file__).parents[1] / "examples" / "commerce_demo.yaml"
         self.demo = MCPDemoServer(load_config(config))
 
     async def test_lists_and_executes_yaml_tools(self):
@@ -58,7 +58,7 @@ class MCPDemoServerTests(unittest.IsolatedAsyncioTestCase):
         async with Client(self.demo.server, raise_exceptions=True) as first:
             await first.call_tool("add_to_cart", {"product_id": "prod_1"})
 
-        config = Path(__file__).parents[1] / "demo_engine" / "commerce_demo.yaml"
+        config = Path(__file__).parents[1] / "examples" / "commerce_demo.yaml"
         fresh_demo = MCPDemoServer(load_config(config))
         async with Client(fresh_demo.server, raise_exceptions=True) as second:
             checkout = await second.call_tool(

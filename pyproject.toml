@@ -1,5 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "demo-engine"
 version = "0.1.0"
+description = "Build stateful demonstration MCP tools from YAML"
+readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+license = "MIT"
+dependencies = [
+    "jsonschema>=4.23,<5",
+    "mcp>=2.2,<3",
+    "PyYAML>=6,<7",
+]
+
+[project.scripts]
+demo-mcp = "demo_engine.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

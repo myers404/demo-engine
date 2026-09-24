@@ -7,7 +7,7 @@ from jsonschema import ValidationError
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
-from .demo_engine import DemoEngine, load_config
+from .engine import DemoEngine, load_config
 
 
 class MCPDemoServer:
