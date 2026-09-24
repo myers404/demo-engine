@@ -74,19 +74,23 @@ Supported actions are `select`, `assert`, `add`, `update`, `remove`,
 `$steps.matches.0.id`.
 
 Selections support exact `where` matches, case-insensitive `contains` searches,
-and `any`, `one`, `some`, or `none` cardinality expectations. State, inputs,
-outputs, and configured collection identities are validated around execution.
+and `any`, `one`, `some`, or `none` cardinality expectations. `where` keys and
+explicit `contains.fields` entries accept the same dot paths, including numeric
+list indexes. Missing selector paths do not match; a `contains` search without a
+field list continues to inspect top-level values only.
+
+State, inputs, outputs, and configured collection identities are validated
+around execution.
 
 See [examples/commerce_demo.yaml](examples/commerce_demo.yaml) for a complete
 definition.
 
 ## Development
 
-Run the tests and build distributions with:
+Run the tests with:
 
 ```sh
 uv run python -m unittest discover -s tests -v
-uv build
 ```
 
 The core interpreter deliberately owns no persistence, authentication, or

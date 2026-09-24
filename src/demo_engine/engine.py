@@ -5,6 +5,9 @@ import yaml
 from jsonschema import Draft202012Validator, validate
 
 
+_MISSING = object()
+
+
 def load_config(path):
     with open(path) as config_file:
         config = yaml.safe_load(config_file)
@@ -88,6 +91,20 @@ class DemoEngine:
                     raise ValueError(f"Duplicate {identity}: {value}")
                 seen.add(value)
 
+    @staticmethod
+    def _lookup(value, path, default=_MISSING):
+        current = value
+        for part in path:
+            if isinstance(current, list):
+                if not part.isdecimal() or int(part) >= len(current):
+                    return default
+                current = current[int(part)]
+            elif isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return default
+        return current
+
     def _resolve(self, value, state, args, steps, action=None):
         if isinstance(value, str) and value.startswith("$"):
             root, *path = value[1:].split(".")
@@ -100,16 +117,9 @@ class DemoEngine:
             if root not in roots:
                 raise ValueError(f"Unknown reference: {value}")
 
-            current = roots[root]
-            for part in path:
-                if isinstance(current, list):
-                    if not part.isdecimal() or int(part) >= len(current):
-                        raise ValueError(f"Unknown reference: {value}")
-                    current = current[int(part)]
-                elif isinstance(current, dict) and part in current:
-                    current = current[part]
-                else:
-                    raise ValueError(f"Unknown reference: {value}")
+            current = self._lookup(roots[root], path)
+            if current is _MISSING:
+                raise ValueError(f"Unknown reference: {value}")
             return deepcopy(current)
         if isinstance(value, dict):
             return {
@@ -129,7 +139,10 @@ class DemoEngine:
         matches = [
             item
             for item in collection
-            if all(item.get(key) == value for key, value in where.items())
+            if all(
+                self._lookup(item, key.split("."), None) == value
+                for key, value in where.items()
+            )
         ]
 
         if contains := selector.get("contains"):
@@ -143,7 +156,10 @@ class DemoEngine:
                 if any(
                     query in str(value).casefold()
                     for value in (
-                        (item.get(field, "") for field in fields)
+                        (
+                            self._lookup(item, field.split("."), "")
+                            for field in fields
+                        )
                         if fields
                         else item.values()
                     )
