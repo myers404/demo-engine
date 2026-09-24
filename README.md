@@ -1,30 +1,39 @@
 # Demo Engine
 
-Demo Engine turns a YAML definition into a small, stateful MCP server for local
-demos, prototypes, workshops, and tests. The YAML defines the initial state,
-JSON Schemas, tools, actions, and result mappings; the Python engine interprets
-those definitions without containing domain-specific behavior.
+Demo Engine is a small YAML-driven framework for building stateful MCP tools. I
+built it for demos, prototypes, workshops, and tests where writing a one-off
+server is more work than the demo itself.
 
-Each server process owns one in-memory state value. Restarting the process
-resets the demo. Demo Engine is intentionally not a hosted multi-user runtime.
+The YAML owns the state, schemas, tools, and behavior. The Python engine stays
+generic and interprets that definition.
+
+One process is one demo session. State lives in memory, and restarting the
+process resets it. This is deliberately not a hosted, multi-user backend.
 
 ## Quick start
 
-Python 3.12 or newer and [uv](https://docs.astral.sh/uv/) are recommended.
+The project requires Python 3.12 or newer and uses
+[uv](https://docs.astral.sh/uv/).
 
 ```sh
 uv sync
 uv run python examples/run_commerce.py
+```
+
+That runs the commerce example directly against the engine. To exercise the
+same demo through a real MCP stdio connection:
+
+```sh
 uv run python examples/manual_stdio.py
 ```
 
-Run the commerce MCP server directly:
+You can also run the server yourself:
 
 ```sh
 uv run demo-mcp examples/commerce_demo.yaml
 ```
 
-An MCP host can launch it with a configuration like this, replacing both paths:
+For an MCP host, replace the two paths in this configuration:
 
 ```json
 {
@@ -45,8 +54,8 @@ An MCP host can launch it with a configuration like this, replacing both paths:
 
 ## Python API
 
-`DemoEngine` is stateless. Callers provide the current state and receive a new
-state with the tool result:
+`DemoEngine` does not own a live session. Give it a state value and it returns
+the next state plus the tool result:
 
 ```python
 from demo_engine import DemoEngine
@@ -56,47 +65,62 @@ state = engine.create_state()
 state, result = engine.execute(state, "search_products", {"query": "linen"})
 ```
 
-Execution uses a deep copy, so a failed call cannot mutate the caller's state.
+Execution happens on a deep copy. If an action or validation fails, the state
+you passed in is untouched.
 
-## YAML format
+## Demo files
 
-A definition contains:
+A demo YAML file has five main parts:
 
-- `server`: MCP name, version, optional title, and cross-tool instructions.
-- `state`: initial JSON-compatible application state.
-- `state_schema`: JSON Schema Draft 2020-12 for the complete state.
-- `collections`: optional identity fields for top-level list collections.
-- `tools`: MCP metadata, schemas, an action, and a result mapping.
+- `server`: MCP name, version, title, and cross-tool instructions.
+- `state`: the initial application state.
+- `state_schema`: JSON Schema Draft 2020-12 for the full state.
+- `collections`: optional identity fields for top-level lists.
+- `tools`: MCP metadata, schemas, actions, and result mappings.
 
-Supported actions are `select`, `assert`, `add`, `update`, `remove`,
-`generate_id`, and ordered `steps`. Values may reference `$args`, `$state`,
-`$steps`, or `$action` with dot paths and non-negative list indexes, such as
-`$steps.matches.0.id`.
+The engine supports `select`, `assert`, `add`, `update`, `remove`,
+`generate_id`, and ordered `steps`.
 
-Selections support exact `where` matches, case-insensitive `contains` searches,
-and `any`, `one`, `some`, or `none` cardinality expectations. `where` keys and
-explicit `contains.fields` entries accept the same dot paths, including numeric
-list indexes. Missing selector paths do not match; a `contains` search without a
-field list continues to inspect top-level values only.
+Values can reference `$args`, `$state`, `$steps`, or `$action`. References use
+dot paths and non-negative list indexes:
 
-State, inputs, outputs, and configured collection identities are validated
-around execution.
+```yaml
+product_id: $steps.matches.0.id
+```
 
-See [examples/commerce_demo.yaml](examples/commerce_demo.yaml) for a complete
-definition.
+Selectors support exact `where` matches, case-insensitive `contains` searches,
+and `any`, `one`, `some`, or `none` match expectations. Exact fields and
+explicit search fields can also use nested paths:
+
+```yaml
+where:
+  customer.id: $args.customer_id
+contains:
+  value: $args.query
+  fields:
+    - customer.name
+    - contacts.0.email
+```
+
+A missing nested path behaves like a missing top-level field. A `contains`
+search without `fields` still searches top-level values only.
+
+State, tool inputs, tool outputs, and collection identities are validated
+around every execution. See
+[examples/commerce_demo.yaml](examples/commerce_demo.yaml) for a complete demo.
 
 ## Development
 
-Run the tests with:
+Run the full test suite from the repository root:
 
 ```sh
 uv run python -m unittest discover -s tests -v
 ```
 
-The core interpreter deliberately owns no persistence, authentication, or
-session management. A local MCP process provides isolation; any future shared
-deployment should keep state ownership outside `DemoEngine`.
+The engine intentionally has no persistence, authentication, tenancy, or
+session abstraction. If shared hosting ever becomes a real requirement, state
+ownership belongs outside `DemoEngine`.
 
 ## License
 
-MIT
+[MIT](LICENSE)
