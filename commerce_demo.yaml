@@ -1,0 +1,307 @@
+server:
+  name: enterprise-commerce-demo
+  title: Enterprise Commerce Demo
+  version: 1.0.0
+  instructions: >-
+    Search the catalog to resolve product IDs before adding products to the
+    cart. Never guess an ID. Add each product only once; use change_quantity
+    for products already in the cart. Before checkout, obtain the customer's
+    name. Checkout requires a non-empty cart.
+
+state:
+  catalog:
+    - id: prod_1
+      sku: SHIRT-LINEN-BLU
+      name: Blue Linen Shirt
+      brand: Northstar
+      category: Apparel
+      description: Lightweight linen button-down shirt for warm weather.
+      price: 45
+      currency: USD
+      color: Ocean Blue
+      sizes: [S, M, L, XL]
+      rating: 4.6
+      inventory: 18
+    - id: prod_2
+      sku: SHOE-LEATHER-BLK
+      name: Black Leather Shoes
+      brand: Mercer & Row
+      category: Footwear
+      description: Full-grain leather derby shoes with a cushioned sole.
+      price: 120
+      currency: USD
+      color: Black
+      sizes: [8, 9, 10, 11, 12]
+      rating: 4.8
+      inventory: 9
+    - id: prod_3
+      sku: BAG-WEEKEND-OLV
+      name: Olive Canvas Weekender
+      brand: Field Notes
+      category: Bags
+      description: Water-resistant canvas travel bag with a padded laptop sleeve.
+      price: 84
+      currency: USD
+      color: Olive
+      sizes: [One Size]
+      rating: 4.7
+      inventory: 12
+    - id: prod_4
+      sku: AUDIO-WIRELESS-SND
+      name: Sandstone Wireless Headphones
+      brand: Aural
+      category: Electronics
+      description: Noise-cancelling over-ear headphones with 30-hour battery life.
+      price: 199
+      currency: USD
+      color: Sandstone
+      sizes: [One Size]
+      rating: 4.5
+      inventory: 6
+  cart: []
+  orders: []
+
+collections:
+  catalog: {identity: id}
+  cart: {identity: id}
+  orders: {identity: id}
+
+state_schema:
+  type: object
+  required: [catalog, cart, orders]
+  additionalProperties: false
+  properties:
+    catalog:
+      type: array
+      items:
+        $ref: "#/$defs/product"
+    cart:
+      type: array
+      items:
+        $ref: "#/$defs/cart_item"
+    orders:
+      type: array
+      items:
+        $ref: "#/$defs/order"
+  $defs:
+    product:
+      type: object
+      required:
+        - id
+        - sku
+        - name
+        - brand
+        - category
+        - description
+        - price
+        - currency
+        - color
+        - sizes
+        - rating
+        - inventory
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        sku: {type: string}
+        name: {type: string}
+        brand: {type: string}
+        category: {type: string}
+        description: {type: string}
+        price: {type: number}
+        currency: {type: string}
+        color: {type: string}
+        sizes:
+          type: array
+          items: {type: [string, integer]}
+        rating: {type: number}
+        inventory: {type: integer, minimum: 0}
+    cart_item:
+      type: object
+      required: [id, name, price, currency, quantity]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        price: {type: number}
+        currency: {type: string}
+        quantity: {type: integer, minimum: 1}
+    order:
+      type: object
+      required: [id, customer, status, items]
+      additionalProperties: false
+      properties:
+        id: {type: string}
+        customer: {type: string}
+        status:
+          enum: [confirmed]
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/$defs/cart_item"
+
+tools:
+  - name: search_products
+    title: Search products
+    description: >-
+      Search the catalog before adding a product or when its exact product ID
+      is unknown. Performs a case-insensitive substring search over product
+      name, brand, category, description, and color. Returns an empty products
+      array when nothing matches.
+    annotations:
+      readOnlyHint: true
+      openWorldHint: false
+    input_schema:
+      type: object
+      required: [query]
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          description: Product name, brand, category, description, or color to find.
+    output_schema:
+      type: object
+      required: [products]
+      additionalProperties: false
+      properties:
+        products:
+          type: array
+          description: Matching catalog products, including authoritative product IDs.
+          items: {type: object}
+    action:
+      type: select
+      target: catalog
+      contains:
+        value: "$args.query"
+        fields: [name, brand, category, description, color]
+      expect: any
+    result:
+      products: "$action"
+
+  - name: add_to_cart
+    title: Add product to cart
+    description: >-
+      Add one unit of a catalog product using an authoritative product ID from
+      search_products. Changes server state. Fails if the product does not
+      exist or is already in the cart; use change_quantity for an existing
+      cart item.
+    annotations:
+      readOnlyHint: false
+      openWorldHint: false
+    input_schema:
+      type: object
+      required: [product_id]
+      additionalProperties: false
+      properties:
+        product_id:
+          type: string
+          description: Exact product ID returned by search_products.
+    output_schema:
+      type: object
+      required: [cart_item]
+      additionalProperties: false
+      properties:
+        cart_item:
+          type: object
+          description: Product added to the cart with quantity set to one.
+    action:
+      type: add
+      target: cart
+      source:
+        target: catalog
+        where:
+          id: "$args.product_id"
+        expect: one
+      value:
+        quantity: 1
+    result:
+      cart_item: "$action"
+
+  - name: change_quantity
+    title: Change cart quantity
+    description: >-
+      Set the absolute quantity of a product already in the cart. Changes
+      server state. The product must already be present and quantity must be at
+      least one; this tool cannot remove an item.
+    annotations:
+      readOnlyHint: false
+      openWorldHint: false
+    input_schema:
+      type: object
+      required: [product_id, quantity]
+      additionalProperties: false
+      properties:
+        product_id:
+          type: string
+          description: Exact ID of a product already in the cart.
+        quantity:
+          type: integer
+          minimum: 1
+          description: New absolute quantity, not an increment.
+    output_schema:
+      type: object
+      required: [cart_item]
+      additionalProperties: false
+      properties:
+        cart_item:
+          type: object
+          description: Updated cart item.
+    action:
+      type: update
+      target: cart
+      where:
+        id: "$args.product_id"
+      expect: one
+      changes:
+        quantity: "$args.quantity"
+    result:
+      cart_item: "$action"
+
+  - name: checkout
+    title: Check out
+    description: >-
+      Create one confirmed order containing every item in the current cart,
+      assign it a server-generated ID, then empty the cart. Changes server
+      state. Fails when the cart is empty.
+    annotations:
+      readOnlyHint: false
+      openWorldHint: false
+    input_schema:
+      type: object
+      required: [customer]
+      additionalProperties: false
+      properties:
+        customer:
+          type: string
+          description: Customer name to record on the order.
+    output_schema:
+      type: object
+      required: [order]
+      additionalProperties: false
+      properties:
+        order:
+          type: object
+          description: Confirmed order created from the previous cart contents.
+    action:
+      type: steps
+      steps:
+        - id: cart_not_empty
+          type: assert
+          target: cart
+          expect: some
+          message: Cart is empty
+        - id: order_id
+          type: generate_id
+        - id: order
+          type: add
+          target: orders
+          value:
+            id: "$steps.order_id"
+            customer: "$args.customer"
+            status: confirmed
+            items: "$state.cart"
+        - id: emptied_cart
+          type: remove
+          target: cart
+          expect: any
+    result:
+      order: "$action.order"
